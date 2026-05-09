@@ -2,12 +2,14 @@
 
 Proyecto académico de Big Data enfocado en la generación de datos sintéticos para una tienda ficticia inspirada en Valorant.
 
-El objetivo es simular compras de skins y transacciones de usuarios para posteriormente realizar procesos de:
+El objetivo del proyecto es simular un entorno real de análisis de datos utilizando múltiples tablas relacionadas para posteriormente realizar procesos de:
 
 - Ingesta de datos
-- ETL
+- ETL (Extract, Transform, Load)
+- Modelado dimensional
+- Star Schema
 - Análisis exploratorio
-- Visualización
+- Visualización de datos
 - Procesamiento en Google Cloud Platform (GCP)
 
 ---
@@ -20,19 +22,48 @@ El objetivo es simular compras de skins y transacciones de usuarios para posteri
 
 ---
 
+# Dataset generado
+
+El proyecto genera automáticamente datasets sintéticos en formato CSV para simular una plataforma de ventas de skins de Valorant.
+
+## Tablas generadas
+
+| Tabla | Descripción |
+|---|---|
+| users.csv | Información de usuarios/jugadores |
+| skins.csv | Catálogo de skins |
+| transactions.csv | Historial de compras |
+| regions.csv | Regiones de juego |
+| payment_methods.csv | Métodos de pago |
+| daily_store.csv | Rotación diaria de tienda |
+
+---
+
+# Relaciones del modelo
+
+```text
+regions
+   |
+users ---- transactions ---- skins
+                |
+        payment_methods
+                |
+          daily_store
+```
+
+---
+
 # Características del dataset
 
 El script genera:
 
-- 10.000 registros de compras
-- IDs de usuarios aleatorios
-- Skins ficticias
-- Rarezas
-- Regiones
-- Métodos de pago
-- Fechas de compra
-
-El resultado se exporta automáticamente a un archivo CSV.
+- 10.000 transacciones
+- 2.000 usuarios
+- 50 skins
+- Regiones y métodos de pago relacionados
+- Fechas aleatorias realistas
+- Relaciones entre tablas
+- Datos compatibles con ETL y Data Warehouse
 
 ---
 
@@ -78,13 +109,19 @@ python main.py
 
 # Resultado esperado
 
-El script generará:
+El script generará automáticamente los siguientes archivos:
 
 ```text
-valorant_store.csv
+data/
+├── users.csv
+├── skins.csv
+├── transactions.csv
+├── regions.csv
+├── payment_methods.csv
+└── daily_store.csv
 ```
 
-Además mostrará en consola las primeras 5 filas del dataset generado.
+Además, el programa mostrará en consola las primeras filas de la tabla `transactions`.
 
 ---
 
@@ -92,22 +129,45 @@ Además mostrará en consola las primeras 5 filas del dataset generado.
 
 ```text
 .
+├── data/
+│   ├── users.csv
+│   ├── skins.csv
+│   ├── transactions.csv
+│   ├── regions.csv
+│   ├── payment_methods.csv
+│   └── daily_store.csv
+│
 ├── main.py
 ├── requirements.txt
 ├── README.md
-└── valorant_store.csv
+└── .gitignore
 ```
+
+---
+
+# Objetivos del proyecto
+
+Este dataset fue diseñado para ser utilizado en:
+
+- Procesos ETL
+- Ingesta en BigQuery
+- Data Warehousing
+- Star Schema Modeling
+- Dashboards y visualización
+- Análisis de comportamiento de usuarios
+- Simulación de entornos Big Data
 
 ---
 
 # Posibles mejoras futuras
 
 - Generación de millones de registros
-- Separación en múltiples tablas
-- Simulación de eventos especiales
 - Exportación a JSON o Parquet
+- Simulación de eventos especiales
 - Integración con BigQuery
+- Automatización ETL
+- Machine Learning sobre comportamiento de usuarios
 - Dashboards en Looker Studio
-- Procesamiento ETL automatizado
+- Dockerización del proyecto
 
 ---
