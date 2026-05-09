@@ -1,84 +1,202 @@
-from faker import Faker
-import pandas as pd
+import os
 import random
+from datetime import datetime, timedelta
 
-# Inicializar Faker
+import pandas as pd
+from faker import Faker
+
+# =========================
+# CONFIGURACIÓN INICIAL
+# =========================
+
 fake = Faker()
 
-# Configuración de datos
-skins = [
-    "Reaver Vandal",
-    "Prime Phantom",
-    "Oni Katana",
-    "Elderflame Operator",
-    "Ion Sheriff",
-    "RGX Blade",
-    "Glitchpop Phantom",
-    "Prelude to Chaos Vandal"
+# Crear carpeta data si no existe
+os.makedirs("data", exist_ok=True)
+
+# =========================
+# REGIONS
+# =========================
+
+regions_data = [
+    {"region_id": 1, "region_name": "LAS", "avg_player_spending": 35},
+    {"region_id": 2, "region_name": "LAN", "avg_player_spending": 30},
+    {"region_id": 3, "region_name": "NA", "avg_player_spending": 70},
+    {"region_id": 4, "region_name": "EU", "avg_player_spending": 65},
+    {"region_id": 5, "region_name": "BR", "avg_player_spending": 40},
+    {"region_id": 6, "region_name": "AP", "avg_player_spending": 50},
 ]
 
-regions = ["LAS", "LAN", "NA", "EU", "BR", "AP"]
+regions_df = pd.DataFrame(regions_data)
+regions_df.to_csv("data/regions.csv", index=False)
 
-payment_methods = [
-    "Credit Card",
-    "PayPal",
-    "Valorant Points Card"
+# =========================
+# PAYMENT METHODS
+# =========================
+
+payment_methods_data = [
+    {"payment_method_id": 1, "method_name": "Credit Card"},
+    {"payment_method_id": 2, "method_name": "PayPal"},
+    {"payment_method_id": 3, "method_name": "Valorant Points Card"},
+    {"payment_method_id": 4, "method_name": "Crypto"},
 ]
 
-# Rarezas con probabilidades
-rarity_weights = {
-    "Select": 40,
-    "Deluxe": 30,
-    "Premium": 20,
-    "Ultra": 10
-}
+payment_methods_df = pd.DataFrame(payment_methods_data)
+payment_methods_df.to_csv("data/payment_methods.csv", index=False)
 
-# Precios según rareza
-rarity_prices = {
-    "Select": [875],
-    "Deluxe": [1275],
-    "Premium": [1775],
-    "Ultra": [2475, 4350]
-}
+# =========================
+# SKINS
+# =========================
 
-# Lista final
-data = []
+skins_list = [
+    ("Reaver Vandal", "Vandal", "Premium", 1775),
+    ("Prime Phantom", "Phantom", "Premium", 1775),
+    ("Oni Katana", "Melee", "Ultra", 4350),
+    ("Elderflame Operator", "Operator", "Ultra", 2475),
+    ("Ion Sheriff", "Sheriff", "Premium", 1775),
+    ("RGX Blade", "Melee", "Ultra", 4350),
+    ("Glitchpop Phantom", "Phantom", "Premium", 1775),
+    ("Prelude to Chaos Vandal", "Vandal", "Ultra", 2475),
+    ("Spline Classic", "Classic", "Deluxe", 1275),
+    ("Smite Knife", "Melee", "Select", 875),
+]
 
-# Generar 10.000 registros
-for purchase_id in range(1, 15001):
+skins_data = []
 
-    rarity = random.choices(
-        list(rarity_weights.keys()),
-        weights=list(rarity_weights.values())
-    )[0]
+for i in range(1, 51):
+    skin = random.choice(skins_list)
 
-    price = random.choice(rarity_prices[rarity])
+    skins_data.append(
+        {
+            "skin_id": i,
+            "skin_name": skin[0],
+            "weapon": skin[1],
+            "rarity": skin[2],
+            "base_price_vp": skin[3],
+            "collection": fake.word().capitalize(),
+            "release_date": fake.date_between(start_date="-3y", end_date="today"),
+        }
+    )
 
-    purchase = {
-        "purchase_id": purchase_id,
-        "user_id": random.randint(100000, 999999),
-        "skin_name": random.choice(skins),
-        "rarity": rarity,
-        "price_vp": price,
-        "region": random.choice(regions),
-        "payment_method": random.choice(payment_methods),
-        "purchase_date": fake.date_time_this_year()
-    }
+skins_df = pd.DataFrame(skins_data)
+skins_df.to_csv("data/skins.csv", index=False)
 
-    data.append(purchase)
+# =========================
+# USERS
+# =========================
 
-# Crear DataFrame
-df = pd.DataFrame(data)
+ranks = [
+    "Iron",
+    "Bronze",
+    "Silver",
+    "Gold",
+    "Platinum",
+    "Diamond",
+    "Ascendant",
+    "Immortal",
+    "Radiant",
+]
 
-# Guardar CSV
-csv_name = "valorant_store.csv"
-df.to_csv(csv_name, index=False)
+users_data = []
 
-print(f"\nCSV generado correctamente: {csv_name}")
+for i in range(1, 2001):
+    region = random.choice(regions_data)
 
-# Leer el CSV nuevamente
-df_read = pd.read_csv(csv_name)
+    users_data.append(
+        {
+            "user_id": i,
+            "username": fake.user_name(),
+            "region_id": region["region_id"],
+            "level": random.randint(1, 500),
+            "total_hours_played": random.randint(10, 5000),
+            "rank": random.choice(ranks),
+            "registration_date": fake.date_between(start_date="-4y", end_date="-30d"),
+            "last_login": fake.date_time_between(start_date="-30d", end_date="now"),
+        }
+    )
 
-# Mostrar primeras 5 filas
-print("\nPrimeras 5 tuplas:\n")
-print(df_read.head())
+users_df = pd.DataFrame(users_data)
+users_df.to_csv("data/users.csv", index=False)
+
+# =========================
+# TRANSACTIONS
+# =========================
+
+transactions_data = []
+
+for i in range(1, 10001):
+    user = random.choice(users_data)
+    skin = random.choice(skins_data)
+    payment = random.choice(payment_methods_data)
+
+    discount = random.choice([0, 0, 0, 10, 15, 20])
+
+    final_price = int(skin["base_price_vp"] * (1 - discount / 100))
+
+    transactions_data.append(
+        {
+            "transaction_id": i,
+            "user_id": user["user_id"],
+            "skin_id": skin["skin_id"],
+            "payment_method_id": payment["payment_method_id"],
+            "purchase_date": fake.date_time_this_year(),
+            "final_price_vp": final_price,
+            "discount_percent": discount,
+            "bundle_purchase": random.choice([True, False]),
+        }
+    )
+
+transactions_df = pd.DataFrame(transactions_data)
+transactions_df.to_csv("data/transactions.csv", index=False)
+
+# =========================
+# DAILY STORE
+# =========================
+
+daily_store_data = []
+
+start_date = datetime.now() - timedelta(days=365)
+
+store_id = 1
+
+for day in range(365):
+    current_date = start_date + timedelta(days=day)
+
+    featured_skins = random.sample(skins_data, 4)
+
+    for skin in featured_skins:
+        daily_store_data.append(
+            {
+                "store_id": store_id,
+                "date": current_date.date(),
+                "skin_id": skin["skin_id"],
+                "featured": random.choice([True, False]),
+            }
+        )
+
+        store_id += 1
+
+daily_store_df = pd.DataFrame(daily_store_data)
+daily_store_df.to_csv("data/daily_store.csv", index=False)
+
+# =========================
+# MOSTRAR RESULTADOS
+# =========================
+
+print("\nArchivos CSV generados correctamente.\n")
+
+files = [
+    "regions.csv",
+    "payment_methods.csv",
+    "skins.csv",
+    "users.csv",
+    "transactions.csv",
+    "daily_store.csv",
+]
+
+for file in files:
+    print(f"✔ data/{file}")
+
+# Mostrar primeras filas de transactions
+print("\nPrimeras 5 filas de transactions:\n")
+print(transactions_df.head())
