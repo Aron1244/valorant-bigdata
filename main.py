@@ -1,3 +1,4 @@
+import json
 import os
 import random
 from datetime import datetime, timedelta
@@ -38,11 +39,13 @@ payment_methods_data = [
     {"payment_method_id": 1, "method_name": "Credit Card"},
     {"payment_method_id": 2, "method_name": "PayPal"},
     {"payment_method_id": 3, "method_name": "Valorant Points Card"},
-    {"payment_method_id": 4, "method_name": "Crypto"},
 ]
 
 payment_methods_df = pd.DataFrame(payment_methods_data)
 payment_methods_df.to_csv("data/payment_methods.csv", index=False)
+
+with open("data/payment_methods.json", "w", encoding="utf-8") as f:
+    json.dump(payment_methods_data, f, indent=2, ensure_ascii=False)
 
 # =========================
 # SKINS
@@ -183,11 +186,12 @@ daily_store_df.to_csv("data/daily_store.csv", index=False)
 # MOSTRAR RESULTADOS
 # =========================
 
-print("\nArchivos CSV generados correctamente.\n")
+print("\nArchivos generados correctamente.\n")
 
 files = [
     "regions.csv",
     "payment_methods.csv",
+    "payment_methods.json",
     "skins.csv",
     "users.csv",
     "transactions.csv",
@@ -195,7 +199,7 @@ files = [
 ]
 
 for file in files:
-    print(f"✔ data/{file}")
+    print(f"[OK] data/{file}")
 
 # Mostrar primeras filas de transactions
 print("\nPrimeras 5 filas de transactions:\n")

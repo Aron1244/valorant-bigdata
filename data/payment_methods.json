@@ -1,0 +1,14 @@
+[
+  {
+    "payment_method_id": 1,
+    "method_name": "Credit Card"
+  },
+  {
+    "payment_method_id": 2,
+    "method_name": "PayPal"
+  },
+  {
+    "payment_method_id": 3,
+    "method_name": "Valorant Points Card"
+  }
+]
