@@ -210,8 +210,12 @@ gcloud storage ls gs://valorant-bigdata-2026-1/raw/
 gcloud storage ls gs://valorant-bigdata-2026-1/raw/users/
 gcloud storage ls gs://valorant-bigdata-2026-1/raw/skins/
 gcloud storage ls gs://valorant-bigdata-2026-1/raw/transactions/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/regions/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/daily_store/
 gcloud storage ls gs://valorant-bigdata-2026-1/raw/payment_methods/
 ```
+
+> **Nota:** `payment_methods` contiene un archivo JSON en lugar de CSV, por lo que requiere conversión a NDJSON antes de cargar a BigQuery (ver paso 7).
 
 ## 6. Carga de CSVs a BigQuery
 
