@@ -188,13 +188,13 @@ gcloud config list
 ## 2. Verificar región del bucket
 
 ```bash
-gcloud storage buckets describe gs://valorant-bigdata-2026
+gcloud storage buckets describe gs://valorant-bigdata-2026-1
 ```
 
 ## 3. Crear dataset en BigQuery
 
 ```bash
-bq mk --dataset --location=US-WEST1 valorant_dw
+bq mk --dataset --location=US-EAST1 valorant_dw
 ```
 
 ## 4. Verificar datasets
@@ -206,33 +206,33 @@ bq ls
 ## 5. Ver estructura raw en Cloud Storage
 
 ```bash
-gcloud storage ls gs://valorant-bigdata-2026/raw/
-gcloud storage ls gs://valorant-bigdata-2026/raw/users/
-gcloud storage ls gs://valorant-bigdata-2026/raw/skins/
-gcloud storage ls gs://valorant-bigdata-2026/raw/transactions/
-gcloud storage ls gs://valorant-bigdata-2026/raw/payment_methods/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/users/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/skins/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/transactions/
+gcloud storage ls gs://valorant-bigdata-2026-1/raw/payment_methods/
 ```
 
 ## 6. Carga de CSVs a BigQuery
 
 ```bash
 # Users
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.users gs://valorant-bigdata-2026/raw/users/users.csv
+bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.users gs://valorant-bigdata-2026-1/raw/users/users.csv
 
 # Skins
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.skins gs://valorant-bigdata-2026/raw/skins/skins.csv
+bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.skins gs://valorant-bigdata-2026-1/raw/skins/skins.csv
 
 # Transactions
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.transactions gs://valorant-bigdata-2026/raw/transactions/transactions.csv
+bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.transactions gs://valorant-bigdata-2026-1/raw/transactions/transactions.csv
 
 # Regions
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.regions gs://valorant-bigdata-2026/raw/regions/regions.csv
+bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.regions gs://valorant-bigdata-2026-1/raw/regions/regions.csv
 
 # Daily Store
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.daily_store gs://valorant-bigdata-2026/raw/daily_store/daily_store.csv
+bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.daily_store gs://valorant-bigdata-2026-1/raw/daily_store/daily_store.csv
 
 # Payment Methods
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.payment_methods gs://valorant-bigdata-2026/raw/payment_methods/payment_methods.csv
+bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.payment_methods gs://valorant-bigdata-2026-1/raw/payment_methods/payment_methods.csv
 ```
 
 ---
@@ -241,7 +241,7 @@ bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.payme
 
 ```bash
 # Descargar JSON
-gcloud storage cp gs://valorant-bigdata-2026/raw/payment_methods/payment_methods.json ./payment_methods.json
+gcloud storage cp gs://valorant-bigdata-2026-1/raw/payment_methods/payment_methods.json ./payment_methods.json
 
 # Convertir JSON Array a NDJSON
 jq -c '.[]' payment_methods.json > payment_methods_ndjson.json
@@ -250,7 +250,7 @@ jq -c '.[]' payment_methods.json > payment_methods_ndjson.json
 head payment_methods_ndjson.json
 
 # Subir archivo convertido
-gcloud storage cp payment_methods_ndjson.json gs://valorant-bigdata-2026/raw/payment_methods/
+gcloud storage cp payment_methods_ndjson.json gs://valorant-bigdata-2026-1/raw/payment_methods/
 ```
 
 ---
@@ -262,7 +262,7 @@ bq load \
   --autodetect \
   --source_format=NEWLINE_DELIMITED_JSON \
   valorant_dw.payment_methods \
-  gs://valorant-bigdata-2026/raw/payment_methods/payment_methods_ndjson.json
+  gs://valorant-bigdata-2026-1/raw/payment_methods/payment_methods_ndjson.json
 ```
 
 ---
@@ -411,6 +411,62 @@ GROUP BY region_name
 ORDER BY total_vp DESC;
 '
 ```
+
+---
+
+## 15. Manejo de errores ETL
+
+Crear tabla de log de errores:
+
+```bash
+bq query --use_legacy_sql=false '
+CREATE OR REPLACE TABLE valorant_dw.etl_log (
+    job_id STRING,
+    table_name STRING,
+    check_type STRING,
+    description STRING,
+    error_count INT64,
+    run_time TIMESTAMP
+);'
+```
+
+### Validaciones con registro en log
+
+```bash
+# Null check - Users
+bq query --use_legacy_sql=false "INSERT INTO valorant_dw.etl_log SELECT \"job_001\", \"users\", \"null_check\", \"nulls in critical columns\", (SELECT COUNT(*) FROM valorant_dw.users WHERE user_id IS NULL OR username IS NULL), CURRENT_TIMESTAMP();"
+
+# Null check - Transactions
+bq query --use_legacy_sql=false "INSERT INTO valorant_dw.etl_log SELECT \"job_001\", \"transactions\", \"null_check\", \"nulls in critical columns\", (SELECT COUNT(*) FROM valorant_dw.transactions WHERE transaction_id IS NULL OR user_id IS NULL OR skin_id IS NULL), CURRENT_TIMESTAMP();"
+
+# Duplicate check - Users
+bq query --use_legacy_sql=false "INSERT INTO valorant_dw.etl_log SELECT \"job_001\", \"users\", \"duplicate_check\", \"duplicate user_ids\", (SELECT COUNT(*) - COUNT(DISTINCT user_id) FROM valorant_dw.users), CURRENT_TIMESTAMP();"
+
+# Range check - Transactions
+bq query --use_legacy_sql=false "INSERT INTO valorant_dw.etl_log SELECT \"job_001\", \"transactions\", \"range_check\", \"negative or zero prices\", (SELECT COUNT(*) FROM valorant_dw.transactions WHERE final_price_vp <= 0), CURRENT_TIMESTAMP();"
+```
+
+### Verificar errores registrados
+
+```bash
+bq query --use_legacy_sql=false 'SELECT * FROM valorant_dw.etl_log;'
+```
+
+---
+
+# Dashboard en Looker Studio
+
+Conectar la tabla `valorant_dw.analytics_sales` desde [lookerstudio.google.com](https://lookerstudio.google.com) para crear visualizaciones interactivas.
+
+### Gráficos recomendados
+
+| Gráfico | Dimensión | Métrica |
+|---------|-----------|---------|
+| Ventas por región | region_name | final_price_vp (SUM) |
+| Ingresos en el tiempo | purchase_date | final_price_vp (SUM) |
+| Top skins más vendidas | skin_name | transaction_id (COUNT) |
+| Ventas por rareza | rarity | final_price_vp (SUM) |
+| Método de pago preferido | payment_method | transaction_id (COUNT) |
 
 ---
 
