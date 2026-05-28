@@ -34,7 +34,7 @@ El proyecto genera automáticamente datasets sintéticos en formato CSV para sim
 | skins.csv | Catálogo de skins |
 | transactions.csv | Historial de compras |
 | regions.csv | Regiones de juego |
-| payment_methods.csv | Métodos de pago |
+| payment_methods.json | Métodos de pago |
 | daily_store.csv | Rotación diaria de tienda |
 
 ---
@@ -236,7 +236,7 @@ bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.regio
 bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.daily_store gs://valorant-bigdata-2026-1/raw/daily_store/daily_store.csv
 
 # Payment Methods
-bq load --skip_leading_rows=1 --autodetect --source_format=CSV valorant_dw.payment_methods gs://valorant-bigdata-2026-1/raw/payment_methods/payment_methods.csv
+# Payment Methods (archivo JSON, se carga en paso 8 tras conversión a NDJSON)
 ```
 
 ---
