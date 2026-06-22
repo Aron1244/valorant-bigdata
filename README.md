@@ -194,7 +194,7 @@ gcloud storage buckets describe gs://valorant-bigdata-2026-1
 ## 3. Crear dataset en BigQuery
 
 ```bash
-bq mk --dataset --location=US-EAST1 valorant_dw
+bq mk --dataset --location=US-EAST4 valorant_dw
 ```
 
 ## 4. Verificar datasets
