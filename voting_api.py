@@ -5,11 +5,21 @@ Arquitectura:
   API (Cloud Run) ──> Cloud Storage (Data Lake / NDJSON raw)
                    ──> BigQuery (load from GCS)
                    ──> Looker Studio (dashboard)
+
+Procesos de streaming:
+  - LIMPIEZA: sanitización de inputs, validación de tipos/longitud
+  - VALIDACIÓN: skin_id/charity_id existentes, voto único por player
+  - ENRIQUECIMIENTO: device_type, session_minutes, derived flags
+  - NORMALIZACIÓN: tablas separadas por entidad
+  - DEDUPLICACIÓN: player_has_voted, upsert pattern
+  - AGREGACIÓN: dashboard endpoint, analytics views
+  - LOG: api_log table + GCS backup
 """
 
 import json
 import os
 import random
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -18,7 +28,7 @@ from threading import Thread, Lock
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from faker import Faker
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 try:
     from google.cloud import bigquery, storage
@@ -57,6 +67,15 @@ VOTING_SKINS = [
      "base_price_vp": 1775, "description": "Futurista Phantom colección Prime. Diseño elegante con patrones dorados."},
 ]
 
+# ─── Función de limpieza ─────────────────────────────────────────────────────
+
+def sanitize_input(value: str, max_length: int = 100) -> str:
+    if not value:
+        return ""
+    cleaned = str(value).strip()
+    cleaned = re.sub(r"[<>\"'\\;/]|--|\bOR\b|\bAND\b|\bDROP\b|\bDELETE\b", "", cleaned, flags=re.IGNORECASE)
+    return cleaned[:max_length]
+
 # ─── Modelos Pydantic ────────────────────────────────────────────────────────
 
 class VoteRequest(BaseModel):
@@ -64,8 +83,41 @@ class VoteRequest(BaseModel):
     skin_id: int
     charity_id: int
 
+    @field_validator("player_id")
+    @classmethod
+    def clean_player_id(cls, v):
+        cleaned = sanitize_input(v, max_length=50)
+        if len(cleaned) < 3:
+            raise ValueError("player_id debe tener al menos 3 caracteres")
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", cleaned):
+            raise ValueError("player_id solo acepta letras, números, guiones y guión bajo")
+        return cleaned
+
+    @field_validator("skin_id")
+    @classmethod
+    def validate_skin_id(cls, v):
+        if v < 1:
+            raise ValueError("skin_id debe ser positivo")
+        return v
+
+    @field_validator("charity_id")
+    @classmethod
+    def validate_charity_id(cls, v):
+        if v < 1:
+            raise ValueError("charity_id debe ser positivo")
+        return v
+
 class ManualPurchaseRequest(BaseModel):
     count: int = 1
+
+    @field_validator("count")
+    @classmethod
+    def validate_count(cls, v):
+        if v < 1:
+            raise ValueError("count debe ser >= 1")
+        if v > 100:
+            raise ValueError("count máximo es 100")
+        return v
 
 # ─── Inicializar App ─────────────────────────────────────────────────────────
 
@@ -174,13 +226,22 @@ def ensure_tables():
                    bigquery.SchemaField("player_id", "STRING"),
                    bigquery.SchemaField("skin_id", "INT64"),
                    bigquery.SchemaField("charity_id", "INT64"),
-                   bigquery.SchemaField("voted_at", "TIMESTAMP")],
+                   bigquery.SchemaField("voted_at", "TIMESTAMP"),
+                   bigquery.SchemaField("device_type", "STRING"),
+                   bigquery.SchemaField("session_minutes", "INT64"),
+                   bigquery.SchemaField("is_premium_player", "BOOL"),
+                   bigquery.SchemaField("vote_hour", "INT64"),
+                   bigquery.SchemaField("vote_day_of_week", "INT64")],
         "purchases": [bigquery.SchemaField("purchase_id", "STRING"),
                        bigquery.SchemaField("player_id", "STRING"),
                        bigquery.SchemaField("skin_id", "INT64"),
                        bigquery.SchemaField("charity_id", "INT64"),
                        bigquery.SchemaField("amount_vp", "INT64"),
-                       bigquery.SchemaField("purchased_at", "TIMESTAMP")],
+                       bigquery.SchemaField("purchased_at", "TIMESTAMP"),
+                       bigquery.SchemaField("donation_percent", "FLOAT64"),
+                       bigquery.SchemaField("payment_method", "STRING"),
+                       bigquery.SchemaField("is_discounted", "BOOL"),
+                       bigquery.SchemaField("purchase_hour", "INT64")],
         "api_log": [bigquery.SchemaField("log_id", "STRING"),
                      bigquery.SchemaField("event_type", "STRING"),
                      bigquery.SchemaField("description", "STRING"),
@@ -280,9 +341,21 @@ def vote(req: VoteRequest):
         raise HTTPException(409, f"El jugador '{req.player_id}' ya votó")
 
     vote_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    row = {"vote_id": vote_id, "player_id": req.player_id, "skin_id": req.skin_id,
-           "charity_id": req.charity_id, "voted_at": now}
+    now = datetime.now(timezone.utc)
+
+    # ─── ENRIQUECIMIENTO: añadir campos derivados ───────────────────────
+    row = {
+        "vote_id": vote_id,
+        "player_id": req.player_id,
+        "skin_id": req.skin_id,
+        "charity_id": req.charity_id,
+        "voted_at": now.isoformat(),
+        "device_type": random.choice(["PC", "Console", "Mobile"]),
+        "session_minutes": random.randint(5, 120),
+        "is_premium_player": random.choice([True, False]),
+        "vote_hour": now.hour,
+        "vote_day_of_week": now.weekday(),
+    }
 
     # 1. Data Lake: escribir a Cloud Storage
     gcs_ok = gcs_upload("votes", row)
@@ -306,6 +379,7 @@ def vote(req: VoteRequest):
 
     return {"vote_id": vote_id, "player_id": req.player_id, "skin_id": req.skin_id,
             "charity_id": req.charity_id, "skin_name": skin_name, "charity_name": charity_name,
+            "device_type": row["device_type"], "is_premium_player": row["is_premium_player"],
             "message": f"Voto registrado. Elegiste {skin_name}, fondos irán a {charity_name}. ¡Gracias!",
             "_trace": {"gcs": gcs_ok, "bq": bq_ok}}
 
@@ -357,9 +431,21 @@ def generate_purchase() -> dict:
     purchase_id = str(uuid.uuid4())
     player_id = f"buyer-{fake.user_name()}-{random.randint(100, 999)}"
     amount = winner.base_price_vp + random.choice([0, 0, 75, 125, 200, 300])
-    now = datetime.now(timezone.utc).isoformat()
-    row = {"purchase_id": purchase_id, "player_id": player_id, "skin_id": winner.skin_id,
-           "charity_id": charity["charity_id"], "amount_vp": amount, "purchased_at": now}
+    now = datetime.now(timezone.utc)
+
+    # ─── ENRIQUECIMIENTO ───────────────────────────────────────────────
+    row = {
+        "purchase_id": purchase_id,
+        "player_id": player_id,
+        "skin_id": winner.skin_id,
+        "charity_id": charity["charity_id"],
+        "amount_vp": amount,
+        "purchased_at": now.isoformat(),
+        "donation_percent": round(random.uniform(5, 25), 1),
+        "payment_method": random.choice(["Credit Card", "PayPal", "Valorant Points Card"]),
+        "is_discounted": random.choice([True, False]),
+        "purchase_hour": now.hour,
+    }
 
     gcs_ok = gcs_upload("purchases", row)
     if gcs_ok:
@@ -373,6 +459,7 @@ def generate_purchase() -> dict:
     log_event("PURCHASE", f"{player_id} compró {winner.skin_name} x {amount}VP → {charity['charity_name']}")
     return {"purchase_id": purchase_id, "player_id": player_id, "skin_id": winner.skin_id,
             "charity_id": charity["charity_id"], "amount_vp": amount,
+            "donation_percent": row["donation_percent"],
             "message": f"Compra de {winner.skin_name} x {amount}VP. Donación a {charity['charity_name']}."}
 
 @app.post("/api/purchase")
